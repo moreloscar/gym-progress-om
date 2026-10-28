@@ -1,0 +1,8 @@
+{
+  "name": "Gym Progress OM",
+  "short_name": "Gym Progress OM",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12"
+}

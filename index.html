@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0f12"><link rel="manifest" href="manifest.webmanifest">
+<title>Gym Progress OM</title>
+<style>
+:root{--bg:#0d0f12;--card:#171a1f;--muted:#9aa2ad;--line:#2a3038;--text:#f6f7f9;--accent:#d9ff45;--danger:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:780px;margin:auto;padding:18px 16px 105px}h1{font-size:28px;margin:8px 0 2px}.muted{color:var(--muted)}.small{font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+button,select,input{font:inherit}button{border:0;border-radius:12px;padding:12px 14px;font-weight:750}.primary{background:var(--accent);color:#111}.ghost{background:#252a31;color:white}
+.exercise{padding:2px 0 12px}.title{font-weight:780;font-size:17px}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.chip{font-size:12px;background:#252a31;border-radius:999px;padding:5px 8px;color:#dce1e7}
+.setgrid{display:grid;grid-template-columns:30px 1fr 1fr 1fr 43px;gap:7px;align-items:center;margin-top:9px}.setgrid input{width:100%;background:#101216;color:white;border:1px solid #343b45;border-radius:10px;padding:11px}.prev{font-size:12px;color:var(--muted);margin:5px 0 0 37px}
+.done{background:var(--accent)!important;color:#111}.metric{font-size:25px;font-weight:850}.history-item{padding:10px 0;border-top:1px solid var(--line)}
+nav{position:fixed;bottom:0;left:0;right:0;background:#111419f2;border-top:1px solid var(--line);display:flex;justify-content:center;gap:5px;padding:9px 8px calc(9px + env(safe-area-inset-bottom));z-index:10}nav button{background:transparent;color:#aaa;padding:10px}nav button.active{color:var(--accent)}
+.hidden{display:none}.timer{position:sticky;top:8px;z-index:9;background:#242a31;border:1px solid #39414b;border-radius:15px;padding:11px 14px;margin:10px 0;display:flex;align-items:center;justify-content:space-between}.timer strong{font-size:21px}
+.banner{border-left:4px solid var(--accent)}.pr{color:var(--accent);font-weight:800}.danger{color:var(--danger)}
+</style></head>
+<body><main>
+<section id="home">
+<h1>Gym Progress OM</h1><div class="muted">Historial Kahunas + nuevas sesiones locales</div>
+<div class="card banner"><div class="row"><div><div class="muted small">Próximo entrenamiento</div><div id="nextWorkout" class="title"></div><div id="lastDate" class="muted"></div></div><button class="primary" onclick="startNext()">Entrenar</button></div></div>
+<div class="row"><div class="card" style="flex:1"><div class="metric" id="sessionCount"></div><div class="muted">sesiones</div></div><div class="card" style="flex:1"><div class="metric" id="setCount"></div><div class="muted">series</div></div></div>
+<div class="card"><div class="title">Rutinas</div><div id="routineButtons" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div>
+</section>
+
+<section id="workout" class="hidden">
+<div class="row"><div><h1 id="workoutTitle"></h1><div id="workoutSub" class="muted"></div></div><button class="ghost" onclick="cancelWorkout()">Cerrar</button></div>
+<div id="timerBox" class="timer hidden"><span>Descanso</span><strong id="timerText">00:00</strong><button class="ghost" onclick="stopTimer()">Saltar</button></div>
+<div id="exerciseList"></div>
+<button class="primary" style="width:100%;margin-top:12px" onclick="finishWorkout()">Finalizar y guardar</button>
+</section>
+
+<section id="history" class="hidden"><h1>Historial</h1>
+<div class="card"><select id="exerciseSelect" style="width:100%;background:#101216;color:white;border:1px solid #343b45;padding:12px;border-radius:10px" onchange="renderHistory()"></select><div id="historySummary" style="margin-top:14px"></div><div id="historyList"></div></div></section>
+
+<section id="settings" class="hidden"><h1>Datos</h1><div class="card">
+<div class="title">Respaldo local</div><p class="muted">Las nuevas sesiones se guardan en este dispositivo. Puedes exportarlas como JSON.</p>
+<button class="ghost" onclick="exportLocal()">Exportar nuevas sesiones</button>
+<button class="ghost danger" onclick="clearLocal()">Borrar nuevas sesiones</button>
+</div></section>
+</main>
+<nav><button id="nHome" class="active" onclick="show('home')">Inicio</button><button id="nWorkout" onclick="startNext()">Entrenar</button><button id="nHistory" onclick="show('history');renderHistory()">Historial</button><button id="nSettings" onclick="show('settings')">Datos</button></nav>
+<script src="data.js"></script><script>
+const BASE=window.GYM_DATA, KEY="gymProgressSessionsV2";let active=null,timerInt=null;
+const $=s=>document.querySelector(s), fmt=d=>new Date(d+"T12:00:00").toLocaleDateString("es-PY",{day:"2-digit",month:"short",year:"numeric"});
+const localSessions=()=>JSON.parse(localStorage.getItem(KEY)||"[]");
+function allSets(){return BASE.sets.concat(localSessions().flatMap(s=>s.sets))}
+function show(id){["home","workout","history","settings"].forEach(x=>$("#"+x).classList.toggle("hidden",x!==id));document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));let n=$("#n"+id[0].toUpperCase()+id.slice(1));if(n)n.classList.add("active")}
+const recentNames=[...new Set(BASE.sessions.slice(0,70).map(x=>x.workout_name))].filter(Boolean);
+function nextRoutine(){let latest=localSessions().slice(-1)[0]?.workout_name||BASE.sessions[0].workout_name;if(recentNames.includes("Full Body A")&&recentNames.includes("Full Body B"))return latest==="Full Body A"?"Full Body B":"Full Body A";return latest}
+function refreshHome(){let ls=localSessions();$("#nextWorkout").textContent=nextRoutine();$("#lastDate").textContent="Última registrada: "+fmt(ls.slice(-1)[0]?.session_date||BASE.sessions[0].session_date);$("#sessionCount").textContent=BASE.sessions.length+ls.length;$("#setCount").textContent=BASE.sets.length+ls.reduce((a,s)=>a+s.sets.length,0)}
+recentNames.forEach(r=>{let b=document.createElement("button");b.className="ghost";b.textContent=r;b.onclick=()=>startRoutine(r);$("#routineButtons").appendChild(b)});
+BASE.exercises.forEach(e=>{let o=document.createElement("option");o.value=e.exercise_name;o.textContent=e.exercise_name;$("#exerciseSelect").appendChild(o)});
+function latestDateFor(r){let dates=allSets().filter(x=>x.workout_name===r).map(x=>x.session_date).filter(Boolean).sort().reverse();return dates[0]}
+function prevSets(r,name){let d=latestDateFor(r);return allSets().filter(x=>x.workout_name===r&&x.exercise_name===name&&x.session_date===d).sort((a,b)=>Number(a.set_number)-Number(b.set_number))}
+function startNext(){startRoutine(nextRoutine())}
+function startRoutine(r){
+ show("workout");stopTimer();let lastDate=latestDateFor(r);$("#workoutTitle").textContent=r;$("#workoutSub").textContent=lastDate?"Anterior: "+fmt(lastDate):"Nueva rutina";
+ let latestBaseDate=BASE.sessions.find(s=>s.workout_name===r)?.session_date;
+ let template=BASE.sets.filter(x=>x.workout_name===r&&x.session_date===latestBaseDate);
+ let names=[...new Set(template.map(x=>x.exercise_name))];active={workout_name:r,started_at:new Date().toISOString(),sets:[]};let box=$("#exerciseList");box.innerHTML="";
+ names.forEach((name,i)=>{let prev=prevSets(r,name), existing=template.filter(x=>x.exercise_name===name), rx=BASE.prescriptions.filter(p=>p.exercise_name===name).slice(-1)[0]||{};
+ let count=Number(rx.target_sets)||existing.length||2, rest=parseRest(rx.rest_period)||150;let card=document.createElement("div");card.className="card exercise";
+ card.innerHTML=`<div class="title">${String.fromCharCode(65+i)}. ${name}</div><div class="chips"><span class="chip">${count} series</span><span class="chip">${rx.target_reps||"—"} reps</span><span class="chip">RIR ${rx.target_rir??"—"}</span><span class="chip">${rx.rest_period||rest+" s"}</span></div><div class="small muted">SERIE · KG · REPS · RIR</div>`;
+ for(let j=0;j<count;j++){let p=prev[j]||{};card.innerHTML+=`<div class="setgrid" data-ex="${encodeURIComponent(name)}" data-rest="${rest}"><b>${j+1}</b><input class="kg" inputmode="decimal" value="${p.weight??""}"><input class="reps" inputmode="numeric" value="${p.reps??""}"><input class="rir" inputmode="numeric" value="${p.rir??""}"><button class="ghost tick" onclick="completeSet(this,'${encodeURIComponent(name)}',${j+1},${rest})">✓</button></div><div class="prev">${p.weight!=null?`Anterior: ${p.weight} kg × ${p.reps}${p.rir!=null?` · RIR ${p.rir}`:""}`:"Sin registro anterior"}</div>`}
+ box.appendChild(card)});
+}
+function parseRest(v){if(!v)return 0;let s=String(v),m=s.match(/(\d+)\s*m/i),sec=s.match(/(\d+)\s*s/i);return (m?+m[1]*60:0)+(sec?+sec[1]:0)||(+s||0)}
+function completeSet(btn,encName,num,rest){btn.classList.toggle("done");if(btn.classList.contains("done"))startTimer(rest)}
+function startTimer(sec){stopTimer();if(!sec)return;$("#timerBox").classList.remove("hidden");let left=sec;tick();timerInt=setInterval(()=>{left--;tick();if(left<=0){stopTimer();navigator.vibrate?.([150,80,150])}},1000);function tick(){$("#timerText").textContent=String(Math.floor(left/60)).padStart(2,"0")+":"+String(left%60).padStart(2,"0")}}
+function stopTimer(){if(timerInt)clearInterval(timerInt);timerInt=null;$("#timerBox").classList.add("hidden")}
+function finishWorkout(){
+ if(!active)return;let today=new Date().toISOString().slice(0,10),rows=[...document.querySelectorAll(".setgrid")], saved=[];
+ rows.forEach((r,i)=>{let name=decodeURIComponent(r.dataset.ex),tick=r.querySelector(".tick");if(!tick.classList.contains("done"))return;saved.push({session_date:today,workout_name:active.workout_name,exercise_name:name,set_number:Number(r.querySelector("b").textContent),weight:Number(r.querySelector(".kg").value)||0,reps:Number(r.querySelector(".reps").value)||0,rir:r.querySelector(".rir").value===""?null:Number(r.querySelector(".rir").value),is_logged:1,volume:(Number(r.querySelector(".kg").value)||0)*(Number(r.querySelector(".reps").value)||0)})});
+ if(!saved.length){alert("Marca al menos una serie como completada.");return}
+ let ls=localSessions();ls.push({session_date:today,workout_name:active.workout_name,started_at:active.started_at,finished_at:new Date().toISOString(),sets:saved});localStorage.setItem(KEY,JSON.stringify(ls));active=null;stopTimer();refreshHome();show("home");alert("Sesión guardada en este dispositivo.");
+}
+function cancelWorkout(){active=null;stopTimer();show("home")}
+function renderHistory(){let name=$("#exerciseSelect").value,rows=allSets().filter(x=>x.exercise_name===name&&Number(x.is_logged)===1).sort((a,b)=>String(b.session_date).localeCompare(String(a.session_date)));let by={};rows.forEach(x=>(by[x.session_date]??=[]).push(x));let maxW=Math.max(0,...rows.map(x=>Number(x.weight)||0)),best=rows.sort((a,b)=>(Number(b.estimated_1rm_epley)||0)-(Number(a.estimated_1rm_epley)||0))[0];$("#historySummary").innerHTML=`<div class="row"><div><div class="metric">${maxW} kg</div><div class="muted small">máximo registrado</div></div><div><div class="metric">${Object.keys(by).length}</div><div class="muted small">sesiones</div></div></div>`;
+ let out="";Object.entries(by).slice(0,40).forEach(([d,ss])=>{let vol=ss.reduce((a,x)=>a+(Number(x.volume)||((Number(x.weight)||0)*(Number(x.reps)||0))),0);out+=`<div class="history-item"><b>${fmt(d)}</b><div>${ss.sort((a,b)=>a.set_number-b.set_number).map(x=>`${x.weight||0} kg × ${x.reps||0}${x.rir!=null?` (RIR ${x.rir})`:""}`).join(" · ")}</div><div class="muted small">Volumen: ${Math.round(vol)} kg</div></div>`});$("#historyList").innerHTML=out||"<p class='muted'>Sin registros.</p>"}
+function exportLocal(){let blob=new Blob([JSON.stringify(localSessions(),null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="gym-progress-nuevas-sesiones.json";a.click();URL.revokeObjectURL(a.href)}
+function clearLocal(){if(confirm("¿Borrar únicamente las sesiones nuevas guardadas en este dispositivo? El historial de Kahunas no se modifica.")){localStorage.removeItem(KEY);refreshHome();}}
+refreshHome();renderHistory();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script></body></html>
