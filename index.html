@@ -15,12 +15,40 @@ button,select,input{font:inherit}button{border:0;border-radius:12px;padding:12px
 nav{position:fixed;bottom:0;left:0;right:0;background:#111419f2;border-top:1px solid var(--line);display:flex;justify-content:center;gap:5px;padding:9px 8px calc(9px + env(safe-area-inset-bottom));z-index:10}nav button{background:transparent;color:#aaa;padding:10px}nav button.active{color:var(--accent)}
 .hidden{display:none}.timer{position:sticky;top:8px;z-index:9;background:#242a31;border:1px solid #39414b;border-radius:15px;padding:11px 14px;margin:10px 0;display:flex;align-items:center;justify-content:space-between}.timer strong{font-size:21px}
 .banner{border-left:4px solid var(--accent)}.pr{color:var(--accent);font-weight:800}.danger{color:var(--danger)}
+.activity-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.activity-grid .card{margin:0}
+.goalbar{height:10px;background:#252a31;border-radius:999px;overflow:hidden;margin-top:10px}
+.goalfill{height:100%;background:var(--accent);border-radius:999px}
+.rangebar{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 14px}
+.rangebar button{padding:8px 10px}
+.rangebar button.on{background:var(--accent);color:#111}
+.chartwrap{height:230px;position:relative;margin-top:10px}
+#stepsChart{width:100%;height:100%;display:block}
+.legend{display:flex;gap:14px;align-items:center;font-size:12px;color:var(--muted);margin-top:8px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--accent);margin-right:5px}
+.workdot{width:9px;height:9px;border-radius:50%;display:inline-block;background:#fff;margin-right:5px}
+@media(min-width:620px){.activity-grid{grid-template-columns:repeat(4,1fr)}}
 </style></head>
 <body><main>
 <section id="home">
 <h1>Gym Progress OM</h1><div class="muted">Historial Kahunas + nuevas sesiones locales</div>
 <div class="card banner"><div class="row"><div><div class="muted small">Próximo entrenamiento</div><div id="nextWorkout" class="title"></div><div id="lastDate" class="muted"></div></div><button class="primary" onclick="startNext()">Entrenar</button></div></div>
 <div class="row"><div class="card" style="flex:1"><div class="metric" id="sessionCount"></div><div class="muted">sesiones</div></div><div class="card" style="flex:1"><div class="metric" id="setCount"></div><div class="muted">series</div></div></div>
+
+<div class="card banner" onclick="show('activity');renderActivity()" style="cursor:pointer">
+  <div class="row">
+    <div>
+      <div class="muted small">Último registro de actividad</div>
+      <div class="metric" id="homeSteps">—</div>
+      <div class="muted" id="homeStepsDate">Pasos</div>
+    </div>
+    <div style="text-align:right">
+      <div class="small muted">Objetivo</div>
+      <div class="title">10.000</div>
+    </div>
+  </div>
+  <div class="goalbar"><div id="homeGoalFill" class="goalfill" style="width:0%"></div></div>
+</div>
 <div class="card"><div class="title">Rutinas</div><div id="routineButtons" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div></div>
 </section>
 
@@ -29,6 +57,36 @@ nav{position:fixed;bottom:0;left:0;right:0;background:#111419f2;border-top:1px s
 <div id="timerBox" class="timer hidden"><span>Descanso</span><strong id="timerText">00:00</strong><button class="ghost" onclick="stopTimer()">Saltar</button></div>
 <div id="exerciseList"></div>
 <button class="primary" style="width:100%;margin-top:12px" onclick="finishWorkout()">Finalizar y guardar</button>
+</section>
+
+
+<section id="activity" class="hidden">
+<h1>Actividad</h1><div class="muted">Histórico migrado desde HealthKit/Kahunas</div>
+<div class="card banner">
+  <div class="row"><div><div class="muted small">Último registro</div><div class="metric" id="latestSteps">—</div><div class="muted" id="latestStepsDate"></div></div>
+  <div style="text-align:right"><div class="small muted">Objetivo diario</div><div class="title">10.000</div><div id="latestPct" class="muted small"></div></div></div>
+  <div class="goalbar"><div id="goalFill" class="goalfill" style="width:0%"></div></div>
+</div>
+<div class="activity-grid">
+  <div class="card"><div class="metric" id="avg7">—</div><div class="muted small">promedio 7 registros</div></div>
+  <div class="card"><div class="metric" id="avg30">—</div><div class="muted small">promedio 30 registros</div></div>
+  <div class="card"><div class="metric" id="goalDays">—</div><div class="muted small">días ≥10.000</div></div>
+  <div class="card"><div class="metric" id="maxSteps">—</div><div class="muted small">máximo histórico</div></div>
+</div>
+<div class="card">
+  <div class="title">Evolución de pasos</div>
+  <div class="rangebar">
+    <button class="ghost" data-range="7" onclick="setActivityRange(7,this)">7 días</button>
+    <button class="ghost on" data-range="30" onclick="setActivityRange(30,this)">30 días</button>
+    <button class="ghost" data-range="90" onclick="setActivityRange(90,this)">3 meses</button>
+    <button class="ghost" data-range="0" onclick="setActivityRange(0,this)">Todo</button>
+  </div>
+  <div class="chartwrap"><canvas id="stepsChart"></canvas></div>
+  <div class="legend"><span><i class="dot"></i>Pasos</span><span><i class="workdot"></i>Día con entrenamiento</span></div>
+  <p class="muted small">Los días sin registro en el export no se interpretan como 0 pasos.</p>
+</div>
+<div class="card"><div class="title">Integración con entrenamiento</div>
+<p class="muted">Los puntos blancos identifican fechas en las que existe una sesión de gimnasio en el historial migrado. Esto permite comparar actividad diaria y entrenamiento sin modificar el archivo original de Kahunas.</p></div>
 </section>
 
 <section id="history" class="hidden"><h1>Historial</h1>
@@ -40,13 +98,13 @@ nav{position:fixed;bottom:0;left:0;right:0;background:#111419f2;border-top:1px s
 <button class="ghost danger" onclick="clearLocal()">Borrar nuevas sesiones</button>
 </div></section>
 </main>
-<nav><button id="nHome" class="active" onclick="show('home')">Inicio</button><button id="nWorkout" onclick="startNext()">Entrenar</button><button id="nHistory" onclick="show('history');renderHistory()">Historial</button><button id="nSettings" onclick="show('settings')">Datos</button></nav>
-<script src="data.js"></script><script>
+<nav><button id="nHome" class="active" onclick="show('home')">Inicio</button><button id="nWorkout" onclick="startNext()">Entrenar</button><button id="nActivity" onclick="show('activity');renderActivity()">Actividad</button><button id="nHistory" onclick="show('history');renderHistory()">Historial</button><button id="nSettings" onclick="show('settings')">Datos</button></nav>
+<script src="data.js"></script><script src="activity.js"></script><script>
 const BASE=window.GYM_DATA, KEY="gymProgressSessionsV2";let active=null,timerInt=null;
 const $=s=>document.querySelector(s), fmt=d=>new Date(d+"T12:00:00").toLocaleDateString("es-PY",{day:"2-digit",month:"short",year:"numeric"});
 const localSessions=()=>JSON.parse(localStorage.getItem(KEY)||"[]");
 function allSets(){return BASE.sets.concat(localSessions().flatMap(s=>s.sets))}
-function show(id){["home","workout","history","settings"].forEach(x=>$("#"+x).classList.toggle("hidden",x!==id));document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));let n=$("#n"+id[0].toUpperCase()+id.slice(1));if(n)n.classList.add("active")}
+function show(id){["home","workout","activity","history","settings"].forEach(x=>$("#"+x).classList.toggle("hidden",x!==id));document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));let n=$("#n"+id[0].toUpperCase()+id.slice(1));if(n)n.classList.add("active")}
 const recentNames=[...new Set(BASE.sessions.slice(0,70).map(x=>x.workout_name))].filter(Boolean);
 function nextRoutine(){let latest=localSessions().slice(-1)[0]?.workout_name||BASE.sessions[0].workout_name;if(recentNames.includes("Full Body A")&&recentNames.includes("Full Body B"))return latest==="Full Body A"?"Full Body B":"Full Body A";return latest}
 function refreshHome(){let ls=localSessions();$("#nextWorkout").textContent=nextRoutine();$("#lastDate").textContent="Última registrada: "+fmt(ls.slice(-1)[0]?.session_date||BASE.sessions[0].session_date);$("#sessionCount").textContent=BASE.sessions.length+ls.length;$("#setCount").textContent=BASE.sets.length+ls.reduce((a,s)=>a+s.sets.length,0)}
@@ -81,5 +139,40 @@ function renderHistory(){let name=$("#exerciseSelect").value,rows=allSets().filt
  let out="";Object.entries(by).slice(0,40).forEach(([d,ss])=>{let vol=ss.reduce((a,x)=>a+(Number(x.volume)||((Number(x.weight)||0)*(Number(x.reps)||0))),0);out+=`<div class="history-item"><b>${fmt(d)}</b><div>${ss.sort((a,b)=>a.set_number-b.set_number).map(x=>`${x.weight||0} kg × ${x.reps||0}${x.rir!=null?` (RIR ${x.rir})`:""}`).join(" · ")}</div><div class="muted small">Volumen: ${Math.round(vol)} kg</div></div>`});$("#historyList").innerHTML=out||"<p class='muted'>Sin registros.</p>"}
 function exportLocal(){let blob=new Blob([JSON.stringify(localSessions(),null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="gym-progress-nuevas-sesiones.json";a.click();URL.revokeObjectURL(a.href)}
 function clearLocal(){if(confirm("¿Borrar únicamente las sesiones nuevas guardadas en este dispositivo? El historial de Kahunas no se modifica.")){localStorage.removeItem(KEY);refreshHome();}}
-refreshHome();renderHistory();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+refreshHome();refreshActivityHome();renderHistory();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+
+const ACT=window.ACTIVITY_DATA||{steps:[]}, STEP_GOAL=10000;let activityRange=30;
+const num=n=>Math.round(Number(n)||0).toLocaleString("es-PY");
+function avg(arr){return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0}
+function workoutDates(){return new Set(BASE.sessions.map(s=>s.session_date).filter(Boolean).concat(localSessions().map(s=>s.session_date).filter(Boolean)))}
+function refreshActivityHome(){
+ let a=ACT.steps||[];if(!a.length)return;let x=a[a.length-1],pct=Math.round(x.steps/STEP_GOAL*100);
+ $("#homeSteps").textContent=num(x.steps)+" pasos";$("#homeStepsDate").textContent=fmt(x.date);
+ $("#homeGoalFill").style.width=Math.min(100,pct)+"%";
+}
+function renderActivity(){
+ let a=ACT.steps||[];if(!a.length)return;
+ let last=a[a.length-1], vals=a.map(x=>x.steps), last7=vals.slice(-7), last30=vals.slice(-30);
+ $("#latestSteps").textContent=num(last.steps)+" pasos";$("#latestStepsDate").textContent=fmt(last.date);
+ let pct=Math.round(last.steps/STEP_GOAL*100);$("#latestPct").textContent=pct+"% del objetivo";$("#goalFill").style.width=Math.min(100,pct)+"%";
+ $("#avg7").textContent=num(avg(last7));$("#avg30").textContent=num(avg(last30));
+ $("#goalDays").textContent=vals.filter(v=>v>=STEP_GOAL).length+"/"+vals.length;$("#maxSteps").textContent=num(Math.max(...vals));
+ drawStepsChart();
+}
+function setActivityRange(n,btn){activityRange=n;document.querySelectorAll(".rangebar button").forEach(b=>b.classList.remove("on"));btn.classList.add("on");drawStepsChart()}
+function drawStepsChart(){
+ let all=ACT.steps||[], data=activityRange?all.slice(-activityRange):all, c=$("#stepsChart");if(!c||!data.length)return;
+ let rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.max(300,rect.width*dpr);c.height=Math.max(180,rect.height*dpr);
+ let ctx=c.getContext("2d");ctx.scale(dpr,dpr);let W=rect.width,H=rect.height,pad={l:42,r:10,t:15,b:28},iw=W-pad.l-pad.r,ih=H-pad.t-pad.b;
+ ctx.clearRect(0,0,W,H);let max=Math.max(12000,...data.map(x=>x.steps))*1.08,min=0;
+ ctx.font="11px -apple-system";ctx.fillStyle="#9aa2ad";ctx.strokeStyle="#2a3038";ctx.lineWidth=1;
+ [0,5000,10000,15000].filter(v=>v<=max).forEach(v=>{let y=pad.t+ih-(v-min)/(max-min)*ih;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillText(v===0?"0":(v/1000)+"k",4,y+4)});
+ let x=i=>pad.l+(data.length===1?iw/2:i*iw/(data.length-1)), y=v=>pad.t+ih-(v-min)/(max-min)*ih;
+ ctx.strokeStyle="#d9ff45";ctx.lineWidth=2;ctx.beginPath();data.forEach((p,i)=>i?ctx.lineTo(x(i),y(p.steps)):ctx.moveTo(x(i),y(p.steps)));ctx.stroke();
+ let wd=workoutDates();data.forEach((p,i)=>{ctx.beginPath();ctx.fillStyle=wd.has(p.date)?"#ffffff":"#d9ff45";ctx.arc(x(i),y(p.steps),wd.has(p.date)?3.8:2.2,0,Math.PI*2);ctx.fill()});
+ let labels=data.length<=10?data.map((_,i)=>i):[0,Math.floor((data.length-1)/2),data.length-1];
+ ctx.fillStyle="#9aa2ad";ctx.textAlign="center";[...new Set(labels)].forEach(i=>{let d=new Date(data[i].date+"T12:00:00");ctx.fillText(d.toLocaleDateString("es-PY",{day:"2-digit",month:"short"}),x(i),H-7)});
+}
+window.addEventListener("resize",()=>{if(!$("#activity").classList.contains("hidden"))drawStepsChart()});
+
 </script></body></html>
